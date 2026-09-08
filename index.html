@@ -149,7 +149,7 @@
       <button id="downloadAll" style="display:none">Save all</button>
       <button id="reset" class="btn-ghost">Clear</button>
     </div>
-    <p class="hint" id="saveHint">On a phone: tap Save, then long-press the image and choose “Save to Photos”, or use the share sheet.</p>
+    <p class="hint" id="saveHint">Tap Save and confirm — the file goes to your downloads or the share sheet. On the hosted version your phone will ask where to save; choose Photos or Files.</p>
   </div>
 
   <footer>
@@ -352,18 +352,41 @@
   $("next").onclick = function () { if (state.index < state.photos.length - 1) { state.index++; render(); } };
 
   // ---- Save ----
-  function exportCurrent() {
-    var off = document.createElement("canvas");
-    compose(state.photos[state.index], off.getContext("2d"), off);
-    return off;
+  // When running as a claude.ai Artifact the sandbox blocks direct downloads,
+  // so we route through the `downloads` capability; as a plain file / on a
+  // normal web host we fall back to an ordinary download link.
+  var _downloads; // memoized: namespace object, null (unavailable), or undefined (not yet asked)
+  function getDownloads() {
+    if (_downloads !== undefined) return Promise.resolve(_downloads);
+    if (window.claude && typeof window.claude.use === "function") {
+      return window.claude.use("downloads").then(function (d) { return (_downloads = d || null); })
+        .catch(function () { return (_downloads = null); });
+    }
+    _downloads = null;
+    return Promise.resolve(null);
   }
+  function toBlob(cv) {
+    return new Promise(function (res) { cv.toBlob(function (b) { res(b); }, "image/jpeg", 0.95); });
+  }
+  function anchorSave(blob, name) {
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement("a");
+    a.href = url; a.download = name; document.body.appendChild(a); a.click();
+    a.remove(); setTimeout(function () { URL.revokeObjectURL(url); }, 4000);
+  }
+  // Saves one canvas; resolves when done (so batches can run one prompt at a time).
   function saveCanvas(cv, name) {
-    cv.toBlob(function (blob) {
-      var url = URL.createObjectURL(blob);
-      var a = document.createElement("a");
-      a.href = url; a.download = name; document.body.appendChild(a); a.click();
-      a.remove(); setTimeout(function () { URL.revokeObjectURL(url); }, 4000);
-    }, "image/jpeg", 0.95);
+    return toBlob(cv).then(function (blob) {
+      return getDownloads().then(function (d) {
+        if (d) return d.save({ filename: name, data: blob }).catch(function () {});
+        anchorSave(blob, name);
+      });
+    });
+  }
+  function exportCanvas(photo) {
+    var off = document.createElement("canvas");
+    compose(photo, off.getContext("2d"), off);
+    return off;
   }
   function outName(photo) {
     var base = (photo.name || "photo").replace(/\.[^.]+$/, "");
@@ -371,16 +394,17 @@
   }
 
   $("download").onclick = function () {
-    saveCanvas(exportCurrent(), outName(state.photos[state.index]));
+    var p = state.photos[state.index];
+    saveCanvas(exportCanvas(p), outName(p));
   };
   $("downloadAll").onclick = function () {
-    state.photos.forEach(function (photo, i) {
-      setTimeout(function () {
-        var off = document.createElement("canvas");
-        compose(photo, off.getContext("2d"), off);
-        saveCanvas(off, outName(photo));
-      }, i * 350); // stagger so browsers don't block the batch
-    });
+    // Sequential: the download prompt allows only one open request at a time.
+    var i = 0;
+    (function step() {
+      if (i >= state.photos.length) return;
+      var p = state.photos[i++];
+      saveCanvas(exportCanvas(p), outName(p)).then(step);
+    })();
   };
   $("reset").onclick = function () {
     state.photos = []; state.index = 0;
