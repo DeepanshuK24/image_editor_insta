@@ -67,14 +67,17 @@
   .sw.blur { background: linear-gradient(135deg,#555,#999); font-size: 9px; color:#fff;
     display:flex;align-items:center;justify-content:center; text-align:center; line-height:1; }
 
-  /* Preview */
-  #previewWrap { display: none; }
+  /* Preview — sticky so it stays visible while you adjust the controls below */
+  .preview { position: sticky; top: 8px; z-index: 5; }
   .stage { background:
       repeating-conic-gradient(#1a1a22 0% 25%, #22222c 0% 50%) 50% / 22px 22px;
     border-radius: var(--radius); border: 1px solid var(--border);
-    display: flex; align-items: center; justify-content: center; padding: 14px; min-height: 220px; }
-  .stage canvas { max-width: 100%; max-height: 60vh; border-radius: 4px;
+    display: flex; align-items: center; justify-content: center; padding: 12px; min-height: 180px; }
+  .stage canvas { max-width: 100%; max-height: 42vh; border-radius: 4px;
     box-shadow: 0 6px 24px rgba(0,0,0,.4); }
+  .selected-badge { display: none; margin-top: 12px; padding: 8px 12px; border-radius: 10px;
+    background: #17311f; border: 1px solid #245536; color: #8ff0b4; font-size: 13px; }
+  .drop.has-files strong { color: var(--ok); }
 
   .nav { display: flex; align-items: center; justify-content: space-between; margin-top: 12px; }
   .nav .count { color: var(--muted); font-size: 13px; }
@@ -104,10 +107,27 @@
 
   <div class="card">
     <div class="drop" id="drop" role="button" tabindex="0">
-      <strong>Tap to choose photos</strong>
-      <span>or drag &amp; drop &middot; you can pick several at once</span>
+      <strong id="dropTitle">Tap to choose photos</strong>
+      <span id="dropSub">or drag &amp; drop &middot; you can pick several at once</span>
     </div>
     <input type="file" id="file" accept="image/*" multiple />
+    <div class="selected-badge" id="selectedBadge"></div>
+  </div>
+
+  <div class="card preview" id="previewWrap" style="display:none">
+    <div class="stage"><canvas id="canvas"></canvas></div>
+    <div class="dims" id="dims"></div>
+    <div class="nav">
+      <button class="btn-ghost" id="prev">‹ Prev</button>
+      <span class="count" id="count"></span>
+      <button class="btn-ghost" id="next">Next ›</button>
+    </div>
+    <div class="actions">
+      <button class="btn-primary" id="download">Save this photo</button>
+      <button id="downloadAll" style="display:none">Save all</button>
+      <button id="reset" class="btn-ghost">Clear</button>
+    </div>
+    <p class="hint" id="saveHint">Tap Save and confirm — the file goes to your downloads or the share sheet. On the hosted version your phone will ask where to save; choose Photos or Files.</p>
   </div>
 
   <div class="card" id="controls" style="display:none">
@@ -137,22 +157,6 @@
       <input type="range" id="radius" min="0" max="12" value="0" />
       <span class="val" id="radiusVal">0%</span>
     </div>
-  </div>
-
-  <div class="card" id="previewWrap">
-    <div class="stage"><canvas id="canvas"></canvas></div>
-    <div class="dims" id="dims"></div>
-    <div class="nav">
-      <button class="btn-ghost" id="prev">‹ Prev</button>
-      <span class="count" id="count"></span>
-      <button class="btn-ghost" id="next">Next ›</button>
-    </div>
-    <div class="actions">
-      <button class="btn-primary" id="download">Save this photo</button>
-      <button id="downloadAll" style="display:none">Save all</button>
-      <button id="reset" class="btn-ghost">Clear</button>
-    </div>
-    <p class="hint" id="saveHint">Tap Save and confirm — the file goes to your downloads or the share sheet. On the hosted version your phone will ask where to save; choose Photos or Files.</p>
   </div>
 
   <footer>
@@ -250,13 +254,14 @@
   function loadFiles(fileList) {
     var files = [].filter.call(fileList, function (f) { return /^image\//.test(f.type); });
     if (!files.length) return;
-    var pending = files.length;
+    setDropStatus("Loading " + files.length + " photo" + (files.length > 1 ? "s" : "") + "…", "");
+    var pending = files.length, added = 0;
     files.forEach(function (file) {
       // imageOrientation:from-image respects EXIF so phone photos aren't sideways.
       var opts = { imageOrientation: "from-image" };
       var done = function (bmp) {
-        state.photos.push({ bitmap: bmp, name: file.name || "photo" });
-        if (--pending === 0) afterLoad();
+        if (bmp) { state.photos.push({ bitmap: bmp, name: file.name || "photo" }); added++; }
+        if (--pending === 0) afterLoad(added);
       };
       if (window.createImageBitmap) {
         createImageBitmap(file, opts).then(done).catch(function () { fallback(file, done); });
@@ -267,16 +272,44 @@
   }
   function fallback(file, done) {
     var img = new Image();
+    var url = URL.createObjectURL(file);
     img.onload = function () { done(img); };
-    img.src = URL.createObjectURL(file);
+    img.onerror = function () { URL.revokeObjectURL(url); done(null); }; // don't stall the batch
+    img.src = url;
   }
-  function afterLoad() {
+  function afterLoad(added) {
+    if (!state.photos.length) {
+      setDropStatus("Tap to choose photos", "Couldn't read that image — try another.");
+      return;
+    }
     state.index = state.photos.length - 1;
-    controls.style.display = "";
-    previewWrap.style.display = "";
+    controls.style.display = "block";
+    previewWrap.style.display = "block";
     $("downloadAll").style.display = state.photos.length > 1 ? "" : "none";
+    updateSelected();
     render();
-    previewWrap.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    previewWrap.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  // Reflect current selection in the upload card.
+  function updateSelected() {
+    var n = state.photos.length;
+    drop.classList.toggle("has-files", n > 0);
+    setDropStatus(
+      n ? (n + " photo" + (n > 1 ? "s" : "") + " selected ✓") : "Tap to choose photos",
+      n ? "Tap to add or replace photos" : "or drag & drop · you can pick several at once"
+    );
+    var badge = $("selectedBadge");
+    if (n) {
+      badge.style.display = "block";
+      badge.textContent = "Ready: " + n + " photo" + (n > 1 ? "s" : "") + ". Adjust settings below — the preview updates live.";
+    } else {
+      badge.style.display = "none";
+    }
+  }
+  function setDropStatus(title, sub) {
+    $("dropTitle").textContent = title;
+    $("dropSub").textContent = sub;
   }
 
   // ---- Compose one photo onto its target canvas ----
@@ -418,6 +451,8 @@
     state.photos = []; state.index = 0;
     controls.style.display = "none"; previewWrap.style.display = "none";
     fileInput.value = "";
+    updateSelected();
+    window.scrollTo({ top: 0, behavior: "smooth" });
   };
 })();
 </script>
