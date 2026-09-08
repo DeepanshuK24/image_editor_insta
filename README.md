@@ -12,6 +12,23 @@ Instagram's dimensions **without cropping**. Pick photos, choose a format, save.
 Open `index.html` in any browser. On your phone, add it to the home screen for
 one-tap access.
 
+## Host it on your phone (GitHub Pages)
+
+Give the tool its own permanent web address so it opens straight in Chrome — no
+login, no app viewer. One-time setup:
+
+1. On GitHub, open this repo → **Settings** → **Pages** (left sidebar).
+2. Under **Build and deployment → Source**, choose **Deploy from a branch**.
+3. Set **Branch** to `claude/instagram-border-tool-aeb1rg` and folder to
+   **/ (root)**, then **Save**.
+4. Wait ~1 minute. Your tool will be live at:
+   **https://deepanshuk24.github.io/image_editor_insta/**
+5. Open that URL in Chrome on your phone and add it to your home screen.
+
+> Tip: opening the tool inside the Claude app's built-in viewer can block the
+> photo picker (Android's in-app web view doesn't always support file uploads).
+> A real browser like Chrome — including the GitHub Pages URL above — avoids this.
+
 1. Tap **Choose photos** (pick one or several from your gallery).
 2. Pick an Instagram **format**:
    - **Best fit** — automatically adds the least border possible while staying
