@@ -1,0 +1,393 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="theme-color" content="#0d0d10" />
+<title>No-Crop Border Tool</title>
+<style>
+  :root {
+    --bg: #0d0d10;
+    --panel: #16161c;
+    --panel-2: #1e1e26;
+    --border: #2b2b36;
+    --text: #f3f3f7;
+    --muted: #9a9aa8;
+    --accent: #7c5cff;
+    --accent-2: #d94fd0;
+    --ok: #35c47a;
+    --radius: 14px;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; background: var(--bg); color: var(--text);
+    font: 15px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+  body { padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); }
+  .wrap { max-width: 760px; margin: 0 auto; padding: 18px 16px 60px; }
+  header h1 { margin: 6px 0 2px; font-size: 22px; font-weight: 700;
+    background: linear-gradient(90deg, var(--accent), var(--accent-2));
+    -webkit-background-clip: text; background-clip: text; color: transparent; }
+  header p { margin: 0 0 18px; color: var(--muted); font-size: 13.5px; }
+
+  .card { background: var(--panel); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 16px; margin-bottom: 16px; }
+
+  /* Drop / upload */
+  .drop { border: 1.5px dashed var(--border); border-radius: var(--radius);
+    padding: 30px 16px; text-align: center; cursor: pointer; transition: .15s;
+    background: var(--panel-2); }
+  .drop.drag { border-color: var(--accent); background: #211f33; }
+  .drop strong { color: var(--text); }
+  .drop span { color: var(--muted); font-size: 13px; display: block; margin-top: 4px; }
+  input[type=file] { display: none; }
+
+  .section-label { font-size: 12px; text-transform: uppercase; letter-spacing: .06em;
+    color: var(--muted); margin: 0 0 10px; font-weight: 600; }
+
+  /* Option groups */
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px,1fr)); gap: 8px; }
+  .chip { background: var(--panel-2); border: 1px solid var(--border); border-radius: 10px;
+    padding: 10px 8px; text-align: center; cursor: pointer; transition: .12s; font-size: 13px; }
+  .chip small { display: block; color: var(--muted); font-size: 11px; margin-top: 2px; }
+  .chip.active { border-color: var(--accent); background: #221f38; box-shadow: 0 0 0 1px var(--accent) inset; }
+
+  .row { display: flex; align-items: center; gap: 12px; margin-top: 14px; flex-wrap: wrap; }
+  .row label { min-width: 92px; color: var(--muted); font-size: 13px; }
+  input[type=range] { flex: 1; accent-color: var(--accent); min-width: 140px; }
+  .val { min-width: 44px; text-align: right; font-variant-numeric: tabular-nums; }
+
+  .swatches { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  .sw { width: 32px; height: 32px; border-radius: 8px; border: 2px solid var(--border); cursor: pointer; }
+  .sw.active { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent); }
+  .sw.custom { position: relative; overflow: hidden;
+    background: conic-gradient(red, yellow, lime, aqua, blue, magenta, red); }
+  .sw.custom input { position: absolute; inset: -6px; opacity: 0; cursor: pointer; }
+  .sw.blur { background: linear-gradient(135deg,#555,#999); font-size: 9px; color:#fff;
+    display:flex;align-items:center;justify-content:center; text-align:center; line-height:1; }
+
+  /* Preview */
+  #previewWrap { display: none; }
+  .stage { background:
+      repeating-conic-gradient(#1a1a22 0% 25%, #22222c 0% 50%) 50% / 22px 22px;
+    border-radius: var(--radius); border: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: center; padding: 14px; min-height: 220px; }
+  .stage canvas { max-width: 100%; max-height: 60vh; border-radius: 4px;
+    box-shadow: 0 6px 24px rgba(0,0,0,.4); }
+
+  .nav { display: flex; align-items: center; justify-content: space-between; margin-top: 12px; }
+  .nav .count { color: var(--muted); font-size: 13px; }
+
+  button { font: inherit; cursor: pointer; border-radius: 10px; border: 1px solid var(--border);
+    background: var(--panel-2); color: var(--text); padding: 10px 14px; transition: .12s; }
+  button:hover { border-color: var(--accent); }
+  button:disabled { opacity: .4; cursor: not-allowed; }
+  .btn-primary { background: linear-gradient(90deg, var(--accent), var(--accent-2));
+    border: none; color: #fff; font-weight: 600; }
+  .btn-ghost { padding: 8px 12px; }
+  .actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 14px; }
+  .actions .btn-primary { flex: 1; min-width: 160px; }
+
+  .hint { color: var(--muted); font-size: 12.5px; margin-top: 10px; }
+  .dims { color: var(--muted); font-size: 12px; margin-top: 6px; text-align: center; }
+  footer { color: var(--muted); font-size: 12px; text-align: center; margin-top: 26px; line-height:1.7; }
+  a { color: var(--accent); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>No-Crop Border Tool</h1>
+    <p>Add borders so your whole photo fits Instagram — nothing cropped. Everything happens on your device; photos are never uploaded anywhere.</p>
+  </header>
+
+  <div class="card">
+    <label class="drop" id="drop" for="file">
+      <strong>Tap to choose photos</strong>
+      <span>or drag &amp; drop &middot; you can pick several at once</span>
+    </label>
+    <input type="file" id="file" accept="image/*" multiple />
+  </div>
+
+  <div class="card" id="controls" style="display:none">
+    <p class="section-label">Instagram format</p>
+    <div class="grid" id="formats"></div>
+
+    <div class="row" style="margin-top:18px">
+      <label>Border color</label>
+      <div class="swatches" id="swatches">
+        <div class="sw active" data-color="#ffffff" style="background:#fff" title="White"></div>
+        <div class="sw" data-color="#000000" style="background:#000" title="Black"></div>
+        <div class="sw blur" data-color="blur" title="Blurred photo">BLUR</div>
+        <div class="sw custom" title="Custom color">
+          <input type="color" id="customColor" value="#ff5c8a" />
+        </div>
+      </div>
+    </div>
+
+    <div class="row">
+      <label>Extra margin</label>
+      <input type="range" id="margin" min="0" max="25" value="0" />
+      <span class="val" id="marginVal">0%</span>
+    </div>
+
+    <div class="row">
+      <label>Corner round</label>
+      <input type="range" id="radius" min="0" max="12" value="0" />
+      <span class="val" id="radiusVal">0%</span>
+    </div>
+  </div>
+
+  <div class="card" id="previewWrap">
+    <div class="stage"><canvas id="canvas"></canvas></div>
+    <div class="dims" id="dims"></div>
+    <div class="nav">
+      <button class="btn-ghost" id="prev">‹ Prev</button>
+      <span class="count" id="count"></span>
+      <button class="btn-ghost" id="next">Next ›</button>
+    </div>
+    <div class="actions">
+      <button class="btn-primary" id="download">Save this photo</button>
+      <button id="downloadAll" style="display:none">Save all</button>
+      <button id="reset" class="btn-ghost">Clear</button>
+    </div>
+    <p class="hint" id="saveHint">On a phone: tap Save, then long-press the image and choose “Save to Photos”, or use the share sheet.</p>
+  </div>
+
+  <footer>
+    Free &middot; ad-free &middot; runs entirely in your browser.<br/>
+    Add it to your home screen for one-tap access.
+  </footer>
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  // Instagram target sizes (short edge 1080px). "fit" = pick best per photo.
+  var FORMATS = [
+    { id: "fit",      name: "Best fit",  sub: "least border" },
+    { id: "square",   name: "Square",    sub: "1:1",   w: 1080, h: 1080 },
+    { id: "portrait", name: "Portrait",  sub: "4:5",   w: 1080, h: 1350 },
+    { id: "land",     name: "Landscape", sub: "1.91:1",w: 1080, h: 566  },
+    { id: "story",    name: "Story",     sub: "9:16",  w: 1080, h: 1920 }
+  ];
+
+  var state = {
+    photos: [],        // { bitmap, name }
+    index: 0,
+    format: "fit",
+    color: "#ffffff",  // or "blur"
+    customColor: "#ff5c8a",
+    margin: 0,         // percent of short edge
+    corner: 0          // percent of short edge
+  };
+
+  var $ = function (id) { return document.getElementById(id); };
+  var fileInput = $("file"), drop = $("drop"), controls = $("controls"),
+      previewWrap = $("previewWrap"), canvas = $("canvas"), ctx = canvas.getContext("2d");
+
+  // ---- Build format chips ----
+  var formatsEl = $("formats");
+  FORMATS.forEach(function (f) {
+    var el = document.createElement("div");
+    el.className = "chip" + (f.id === state.format ? " active" : "");
+    el.innerHTML = f.name + "<small>" + f.sub + "</small>";
+    el.onclick = function () {
+      state.format = f.id;
+      [].forEach.call(formatsEl.children, function (c) { c.classList.remove("active"); });
+      el.classList.add("active");
+      render();
+    };
+    formatsEl.appendChild(el);
+  });
+
+  // ---- Color swatches ----
+  var swatches = $("swatches");
+  [].forEach.call(swatches.querySelectorAll(".sw"), function (sw) {
+    if (sw.classList.contains("custom")) return;
+    sw.onclick = function () { pickColor(sw, sw.dataset.color); };
+  });
+  $("customColor").oninput = function (e) {
+    state.customColor = e.target.value;
+    var host = e.target.closest(".sw");
+    host.style.background = e.target.value;
+    pickColor(host, e.target.value);
+  };
+  function pickColor(el, color) {
+    state.color = color;
+    [].forEach.call(swatches.querySelectorAll(".sw"), function (s) { s.classList.remove("active"); });
+    el.classList.add("active");
+    render();
+  }
+
+  // ---- Sliders ----
+  $("margin").oninput = function (e) {
+    state.margin = +e.target.value; $("marginVal").textContent = state.margin + "%"; render();
+  };
+  $("radius").oninput = function (e) {
+    state.corner = +e.target.value; $("radiusVal").textContent = state.corner + "%"; render();
+  };
+
+  // ---- File loading ----
+  fileInput.onchange = function (e) { loadFiles(e.target.files); };
+  ["dragenter","dragover"].forEach(function (ev) {
+    drop.addEventListener(ev, function (e) { e.preventDefault(); drop.classList.add("drag"); });
+  });
+  ["dragleave","drop"].forEach(function (ev) {
+    drop.addEventListener(ev, function (e) { e.preventDefault(); drop.classList.remove("drag"); });
+  });
+  drop.addEventListener("drop", function (e) {
+    if (e.dataTransfer && e.dataTransfer.files) loadFiles(e.dataTransfer.files);
+  });
+
+  function loadFiles(fileList) {
+    var files = [].filter.call(fileList, function (f) { return /^image\//.test(f.type); });
+    if (!files.length) return;
+    var pending = files.length;
+    files.forEach(function (file) {
+      // imageOrientation:from-image respects EXIF so phone photos aren't sideways.
+      var opts = { imageOrientation: "from-image" };
+      var done = function (bmp) {
+        state.photos.push({ bitmap: bmp, name: file.name || "photo" });
+        if (--pending === 0) afterLoad();
+      };
+      if (window.createImageBitmap) {
+        createImageBitmap(file, opts).then(done).catch(function () { fallback(file, done); });
+      } else {
+        fallback(file, done);
+      }
+    });
+  }
+  function fallback(file, done) {
+    var img = new Image();
+    img.onload = function () { done(img); };
+    img.src = URL.createObjectURL(file);
+  }
+  function afterLoad() {
+    state.index = state.photos.length - 1;
+    controls.style.display = "";
+    previewWrap.style.display = "";
+    $("downloadAll").style.display = state.photos.length > 1 ? "" : "none";
+    render();
+    previewWrap.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  }
+
+  // ---- Compose one photo onto its target canvas ----
+  function compose(photo, targetCtx, targetCanvas) {
+    var iw = photo.bitmap.width, ih = photo.bitmap.height;
+
+    // Decide target dimensions.
+    var tw, th;
+    if (state.format === "fit") {
+      // Pick the IG aspect closest to the photo's own aspect (least border added),
+      // clamped to IG's allowed range (from 1.91:1 wide to 4:5 tall).
+      var ar = iw / ih;
+      var minAR = 1080 / 1350; // 0.8  (tallest allowed)
+      var maxAR = 1080 / 566;  // 1.908 (widest allowed)
+      var target = Math.max(minAR, Math.min(maxAR, ar));
+      if (target >= 1) { tw = 1080; th = Math.round(1080 / target); }
+      else { th = 1350; tw = Math.round(1350 * target); }
+    } else {
+      var f = FORMATS.filter(function (x) { return x.id === state.format; })[0];
+      tw = f.w; th = f.h;
+    }
+
+    targetCanvas.width = tw; targetCanvas.height = th;
+    var shortEdge = Math.min(tw, th);
+    var marginPx = shortEdge * (state.margin / 100);
+    var cornerPx = shortEdge * (state.corner / 100) / 2;
+
+    // Background: solid color, or blurred cover of the photo itself.
+    if (state.color === "blur") {
+      drawBlurredCover(photo.bitmap, targetCtx, tw, th);
+    } else {
+      targetCtx.fillStyle = state.color;
+      targetCtx.fillRect(0, 0, tw, th);
+    }
+
+    // Fit whole image inside (contain) minus margin — never cropped.
+    var availW = tw - marginPx * 2, availH = th - marginPx * 2;
+    var scale = Math.min(availW / iw, availH / ih);
+    var dw = iw * scale, dh = ih * scale;
+    var dx = (tw - dw) / 2, dy = (th - dh) / 2;
+
+    targetCtx.save();
+    if (cornerPx > 0) { roundRectPath(targetCtx, dx, dy, dw, dh, cornerPx); targetCtx.clip(); }
+    targetCtx.drawImage(photo.bitmap, dx, dy, dw, dh);
+    targetCtx.restore();
+  }
+
+  function drawBlurredCover(bmp, c, tw, th) {
+    var iw = bmp.width, ih = bmp.height;
+    var scale = Math.max(tw / iw, th / ih); // cover
+    var dw = iw * scale, dh = ih * scale;
+    c.save();
+    c.filter = "blur(" + Math.round(Math.min(tw, th) * 0.04) + "px) brightness(0.9)";
+    c.drawImage(bmp, (tw - dw) / 2, (th - dh) / 2, dw, dh);
+    c.restore();
+  }
+
+  function roundRectPath(c, x, y, w, h, r) {
+    r = Math.min(r, w / 2, h / 2);
+    c.beginPath();
+    c.moveTo(x + r, y);
+    c.arcTo(x + w, y, x + w, y + h, r);
+    c.arcTo(x + w, y + h, x, y + h, r);
+    c.arcTo(x, y + h, x, y, r);
+    c.arcTo(x, y, x + w, y, r);
+    c.closePath();
+  }
+
+  // ---- Render current preview ----
+  function render() {
+    if (!state.photos.length) return;
+    var photo = state.photos[state.index];
+    compose(photo, ctx, canvas);
+    $("count").textContent = (state.index + 1) + " / " + state.photos.length;
+    $("dims").textContent = canvas.width + " × " + canvas.height + " px";
+    $("prev").disabled = state.index === 0;
+    $("next").disabled = state.index === state.photos.length - 1;
+  }
+
+  $("prev").onclick = function () { if (state.index > 0) { state.index--; render(); } };
+  $("next").onclick = function () { if (state.index < state.photos.length - 1) { state.index++; render(); } };
+
+  // ---- Save ----
+  function exportCurrent() {
+    var off = document.createElement("canvas");
+    compose(state.photos[state.index], off.getContext("2d"), off);
+    return off;
+  }
+  function saveCanvas(cv, name) {
+    cv.toBlob(function (blob) {
+      var url = URL.createObjectURL(blob);
+      var a = document.createElement("a");
+      a.href = url; a.download = name; document.body.appendChild(a); a.click();
+      a.remove(); setTimeout(function () { URL.revokeObjectURL(url); }, 4000);
+    }, "image/jpeg", 0.95);
+  }
+  function outName(photo) {
+    var base = (photo.name || "photo").replace(/\.[^.]+$/, "");
+    return base + "_ig.jpg";
+  }
+
+  $("download").onclick = function () {
+    saveCanvas(exportCurrent(), outName(state.photos[state.index]));
+  };
+  $("downloadAll").onclick = function () {
+    state.photos.forEach(function (photo, i) {
+      setTimeout(function () {
+        var off = document.createElement("canvas");
+        compose(photo, off.getContext("2d"), off);
+        saveCanvas(off, outName(photo));
+      }, i * 350); // stagger so browsers don't block the batch
+    });
+  };
+  $("reset").onclick = function () {
+    state.photos = []; state.index = 0;
+    controls.style.display = "none"; previewWrap.style.display = "none";
+    fileInput.value = "";
+  };
+})();
+</script>
+</body>
+</html>
